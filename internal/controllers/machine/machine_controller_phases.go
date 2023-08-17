@@ -29,10 +29,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/klog/v2"
 	"k8s.io/utils/pointer"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
-
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/cluster-api/controllers/external"
 	capierrors "sigs.k8s.io/cluster-api/errors"
@@ -41,13 +37,18 @@ import (
 	"sigs.k8s.io/cluster-api/util/conditions"
 	utilconversion "sigs.k8s.io/cluster-api/util/conversion"
 	"sigs.k8s.io/cluster-api/util/patch"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 )
 
 var (
 	externalReadyWait = 30 * time.Second
 )
 
-func (r *Reconciler) reconcilePhase(_ context.Context, m *clusterv1.Machine) {
+func (r *Reconciler) reconcilePhase(ctx context.Context, m *clusterv1.Machine) {
+	log := ctrl.LoggerFrom(ctx)
+	log.Info("Machine", "phase", m.Status.Phase)
 	originalPhase := m.Status.Phase
 
 	// Set the phase to "pending" if nil.
@@ -62,12 +63,22 @@ func (r *Reconciler) reconcilePhase(_ context.Context, m *clusterv1.Machine) {
 
 	// Set the phase to "provisioned" if there is a provider ID.
 	if m.Spec.ProviderID != nil {
-		m.Status.SetTypedPhase(clusterv1.MachinePhaseProvisioned)
+		// handle in-place upgrade
+		if m.Spec.Upgrade.Run != nil && *m.Spec.Upgrade.Run {
+			m.Status.SetTypedPhase(clusterv1.MachinePhaseUpgrading)
+		} else {
+			m.Status.SetTypedPhase(clusterv1.MachinePhaseProvisioned)
+		}
 	}
 
 	// Set the phase to "running" if there is a NodeRef field and infrastructure is ready.
 	if m.Status.NodeRef != nil && m.Status.InfrastructureReady {
-		m.Status.SetTypedPhase(clusterv1.MachinePhaseRunning)
+		// handle in-place upgrade
+		if m.Spec.Upgrade.Run != nil && *m.Spec.Upgrade.Run {
+			m.Status.SetTypedPhase(clusterv1.MachinePhaseUpgrading)
+		} else {
+			m.Status.SetTypedPhase(clusterv1.MachinePhaseRunning)
+		}
 	}
 
 	// Set the phase to "failed" if any of Status.FailureReason or Status.FailureMessage is not-nil.
@@ -305,6 +316,12 @@ func (r *Reconciler) reconcileInfrastructure(ctx context.Context, s *scope) (ctr
 	err = util.UnstructuredUnmarshalField(infraConfig, &m.Status.Addresses, "status", "addresses")
 	if err != nil && err != util.ErrUnstructuredFieldNotFound {
 		return ctrl.Result{}, errors.Wrapf(err, "failed to retrieve addresses from infrastructure provider for Machine %q in namespace %q", m.Name, m.Namespace)
+	}
+
+	// Get and set Status.Upgrade from the infrastructure provider.
+	err = util.UnstructuredUnmarshalField(infraConfig, &m.Status.Upgrade, "status", "upgrade")
+	if err != nil && err != util.ErrUnstructuredFieldNotFound {
+		return ctrl.Result{}, errors.Wrapf(err, "failed to retrieve status.upgrade from infrastructure provider for Machine %q in namespace %q", m.Name, m.Namespace)
 	}
 
 	// Get and set the failure domain from the infrastructure provider.

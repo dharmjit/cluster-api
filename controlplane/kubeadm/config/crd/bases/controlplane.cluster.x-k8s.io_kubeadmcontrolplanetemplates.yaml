@@ -2515,7 +2515,8 @@ spec:
                             type: object
                           type:
                             description: Type of rollout. Currently the only supported
-                              strategy is "RollingUpdate". Default is RollingUpdate.
+                              strategies are "RollingUpdate" and "InplaceUpdate" Default
+                              is RollingUpdate.
                             type: string
                         type: object
                     required:

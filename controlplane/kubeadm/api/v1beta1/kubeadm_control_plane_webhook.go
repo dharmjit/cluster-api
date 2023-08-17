@@ -367,39 +367,40 @@ func validateRolloutStrategy(rolloutStrategy *RolloutStrategy, replicas *int32, 
 		return allErrs
 	}
 
-	if rolloutStrategy.Type != RollingUpdateStrategyType {
+	if rolloutStrategy.Type != RollingUpdateStrategyType && rolloutStrategy.Type != InplaceUpdateStrategyType {
 		allErrs = append(
 			allErrs,
 			field.Required(
 				pathPrefix.Child("type"),
-				"only RollingUpdateStrategyType is supported",
+				"only RollingUpdate or InplaceUpdate Rollout Strategy types are supported",
 			),
 		)
 	}
 
-	ios1 := intstr.FromInt(1)
-	ios0 := intstr.FromInt(0)
+	if rolloutStrategy.Type == RollingUpdateStrategyType {
+		ios1 := intstr.FromInt(1)
+		ios0 := intstr.FromInt(0)
 
-	if rolloutStrategy.RollingUpdate.MaxSurge.IntValue() == ios0.IntValue() && (replicas != nil && *replicas < int32(3)) {
-		allErrs = append(
-			allErrs,
-			field.Required(
-				pathPrefix.Child("rollingUpdate"),
-				"when KubeadmControlPlane is configured to scale-in, replica count needs to be at least 3",
-			),
-		)
+		if rolloutStrategy.RollingUpdate.MaxSurge.IntValue() == ios0.IntValue() && (replicas != nil && *replicas < int32(3)) {
+			allErrs = append(
+				allErrs,
+				field.Required(
+					pathPrefix.Child("rollingUpdate"),
+					"when KubeadmControlPlane is configured to scale-in, replica count needs to be at least 3",
+				),
+			)
+		}
+
+		if rolloutStrategy.RollingUpdate.MaxSurge.IntValue() != ios1.IntValue() && rolloutStrategy.RollingUpdate.MaxSurge.IntValue() != ios0.IntValue() {
+			allErrs = append(
+				allErrs,
+				field.Required(
+					pathPrefix.Child("rollingUpdate", "maxSurge"),
+					"value must be 1 or 0",
+				),
+			)
+		}
 	}
-
-	if rolloutStrategy.RollingUpdate.MaxSurge.IntValue() != ios1.IntValue() && rolloutStrategy.RollingUpdate.MaxSurge.IntValue() != ios0.IntValue() {
-		allErrs = append(
-			allErrs,
-			field.Required(
-				pathPrefix.Child("rollingUpdate", "maxSurge"),
-				"value must be 1 or 0",
-			),
-		)
-	}
-
 	return allErrs
 }
 

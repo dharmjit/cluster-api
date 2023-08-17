@@ -209,7 +209,6 @@ func (r *KubeadmControlPlaneReconciler) Reconcile(ctx context.Context, req ctrl.
 				reterr = kerrors.NewAggregate([]error{reterr, err})
 			}
 		}
-
 		// Always attempt to Patch the KubeadmControlPlane object and status after each reconciliation.
 		if err := patchKubeadmControlPlane(ctx, patchHelper, kcp); err != nil {
 			log.Error(err, "Failed to patch KubeadmControlPlane")
@@ -394,18 +393,33 @@ func (r *KubeadmControlPlaneReconciler) reconcile(ctx context.Context, controlPl
 	if result, err := r.reconcileUnhealthyMachines(ctx, controlPlane); err != nil || !result.IsZero() {
 		return result, err
 	}
-
 	// Control plane machines rollout due to configuration changes (e.g. upgrades) takes precedence over other operations.
 	machinesNeedingRollout, rolloutReasons := controlPlane.MachinesNeedingRollout()
+	MachinesRunningInplaceUpgrades := controlPlane.MachinesRunningInplaceUpgrades()
+	log.Info("machinesNeedingRollout", "machines", machinesNeedingRollout.Names(), "reasons", rolloutReasons)
+	log.Info("machinesPendingInplaceUpgrades", "machines", MachinesRunningInplaceUpgrades.Names())
 	switch {
-	case len(machinesNeedingRollout) > 0:
+	case len(machinesNeedingRollout) > 0 && MachinesRunningInplaceUpgrades.Len() == 0:
 		var reasons []string
 		for _, rolloutReason := range rolloutReasons {
 			reasons = append(reasons, rolloutReason)
 		}
-		log.Info(fmt.Sprintf("Rolling out Control Plane machines: %s", strings.Join(reasons, ",")), "machinesNeedingRollout", machinesNeedingRollout.Names())
-		conditions.MarkFalse(controlPlane.KCP, controlplanev1.MachinesSpecUpToDateCondition, controlplanev1.RollingUpdateInProgressReason, clusterv1.ConditionSeverityWarning, "Rolling %d replicas with outdated spec (%d replicas up to date)", len(machinesNeedingRollout), len(controlPlane.Machines)-len(machinesNeedingRollout))
+		if controlPlane.KCP.Spec.RolloutStrategy.Type == controlplanev1.InplaceUpdateStrategyType {
+			log.Info(fmt.Sprintf("In-place Upgrading Control Plane machines: %s", strings.Join(reasons, ",")), "machinesInplaceUpgrading", machinesNeedingRollout.Names())
+			conditions.MarkFalse(controlPlane.KCP, controlplanev1.MachinesSpecUpToDateCondition, controlplanev1.InplaceUpdateInProgressReason, clusterv1.ConditionSeverityWarning, "Inplace Upgrading %d replicas with outdated spec (%d replicas up to date)", len(machinesNeedingRollout), len(controlPlane.Machines)-len(machinesNeedingRollout))
+		} else {
+			log.Info(fmt.Sprintf("Rolling out Control Plane machines: %s", strings.Join(reasons, ",")), "machinesNeedingRollout", machinesNeedingRollout.Names())
+			conditions.MarkFalse(controlPlane.KCP, controlplanev1.MachinesSpecUpToDateCondition, controlplanev1.RollingUpdateInProgressReason, clusterv1.ConditionSeverityWarning, "Rolling %d replicas with outdated spec (%d replicas up to date)", len(machinesNeedingRollout), len(controlPlane.Machines)-len(machinesNeedingRollout))
+		}
 		return r.upgradeControlPlane(ctx, controlPlane, machinesNeedingRollout)
+	case len(MachinesRunningInplaceUpgrades) > 0:
+		// Patch Machine if the upgrade is completed
+		err := controlPlane.PatchUpgradeMachine(ctx, MachinesRunningInplaceUpgrades)
+		if err != nil {
+			log.Error(err, "error patching in-place upgraded machine")
+		}
+		log.Info("Inplace upgrading Control Plane machines:", "machinesPendingInplaceUpgrades", MachinesRunningInplaceUpgrades.Names())
+		return ctrl.Result{Requeue: true}, nil
 	default:
 		// make sure last upgrade operation is marked as completed.
 		// NOTE: we are checking the condition already exists in order to avoid to set this condition at the first

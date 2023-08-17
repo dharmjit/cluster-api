@@ -18,15 +18,22 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/blang/semver/v4"
 	"github.com/pkg/errors"
+	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/klog/v2"
+	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
 
+	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	controlplanev1 "sigs.k8s.io/cluster-api/controlplane/kubeadm/api/v1beta1"
 	"sigs.k8s.io/cluster-api/controlplane/kubeadm/internal"
 	"sigs.k8s.io/cluster-api/util"
 	"sigs.k8s.io/cluster-api/util/collections"
+	"sigs.k8s.io/cluster-api/util/patch"
 	"sigs.k8s.io/cluster-api/util/version"
 )
 
@@ -37,7 +44,7 @@ func (r *KubeadmControlPlaneReconciler) upgradeControlPlane(
 ) (ctrl.Result, error) {
 	logger := ctrl.LoggerFrom(ctx)
 
-	if controlPlane.KCP.Spec.RolloutStrategy == nil || controlPlane.KCP.Spec.RolloutStrategy.RollingUpdate == nil {
+	if controlPlane.KCP.Spec.RolloutStrategy == nil || (controlPlane.KCP.Spec.RolloutStrategy.Type != controlplanev1.RollingUpdateStrategyType && controlPlane.KCP.Spec.RolloutStrategy.Type != controlplanev1.InplaceUpdateStrategyType) {
 		return ctrl.Result{}, errors.New("rolloutStrategy is not set")
 	}
 
@@ -127,8 +134,67 @@ func (r *KubeadmControlPlaneReconciler) upgradeControlPlane(
 			return r.scaleUpControlPlane(ctx, controlPlane)
 		}
 		return r.scaleDownControlPlane(ctx, controlPlane, machinesRequireUpgrade)
+	case controlplanev1.InplaceUpdateStrategyType:
+		return r.inplaceUpgradeControlPlane(ctx, controlPlane, machinesRequireUpgrade)
 	default:
 		logger.Info("RolloutStrategy type is not set to RollingUpdateStrategyType, unable to determine the strategy for rolling out machines")
 		return ctrl.Result{}, nil
 	}
+}
+
+func (r *KubeadmControlPlaneReconciler) inplaceUpgradeControlPlane(ctx context.Context, controlPlane *internal.ControlPlane, machines collections.Machines) (ctrl.Result, error) {
+	logger := ctrl.LoggerFrom(ctx)
+
+	// Run preflight checks to ensure that the control plane is stable before proceeding with an in-place upgrade operation; if not, wait.
+	if result, err := r.preflightChecks(ctx, controlPlane); err != nil || !result.IsZero() {
+		return result, err
+	}
+
+	// if controlPlane.KCP.Spec.MachineTemplate.ObjectMeta.Annotations == nil {
+	// 	controlPlane.KCP.Spec.MachineTemplate.ObjectMeta.Annotations = make(map[string]string)
+	// }
+	// _, ok := controlPlane.KCP.Spec.MachineTemplate.ObjectMeta.Annotations["controlplane.cluster.x-k8s.io/inplace-upgrade"]
+	// if !ok {
+	// 	controlPlane.KCP.Spec.MachineTemplate.ObjectMeta.Annotations["controlplane.cluster.x-k8s.io/inplace-upgrade"] = ""
+	// }
+
+	if err := r.inplaceUpdateMachine(ctx, controlPlane.KCP, machines.Oldest()); err != nil {
+		logger.Error(err, "Failed to update control plane Machine")
+		r.recorder.Eventf(controlPlane.KCP, corev1.EventTypeWarning, "FailedInplaceUpdate", "Failed to inplace Update control plane Machine for cluster % control plane: %v", klog.KObj(controlPlane.Cluster), err)
+		return ctrl.Result{}, err
+	}
+	// Requeue the control plane, in case there are other operations to perform
+	return ctrl.Result{Requeue: true}, nil
+}
+
+func (r *KubeadmControlPlaneReconciler) inplaceUpdateMachine(ctx context.Context, kcp *controlplanev1.KubeadmControlPlane, machine *clusterv1.Machine) (reterr error) {
+	// original := client.MergeFrom(machine.DeepCopy())
+	patchHelper, err := patch.NewHelper(machine, r.Client)
+	if err != nil {
+		return errors.Wrap(err, "failed to create patch helper for the machine")
+	}
+	defer func() {
+		ctrl.LoggerFrom(ctx).Info("In-place Upgrading", "Machine", machine)
+		if err := patchHelper.Patch(ctx, machine); err != nil {
+			reterr = errors.Wrap(err, "failed to patch the machine")
+		}
+	}()
+
+	machine.Spec.Upgrade.Run = pointer.Bool(true)
+	upgradeStartedAt := v1.Now()
+	machine.Spec.Upgrade.StartedAt = &upgradeStartedAt
+	if kcp.Spec.Version != *machine.Spec.Version {
+		machine.Spec.Version = &kcp.Spec.Version
+	}
+	clusterConfig, err := json.Marshal(kcp.Spec.KubeadmConfigSpec.ClusterConfiguration)
+	if err != nil {
+		return errors.Wrap(err, "failed to marshal cluster configuration")
+	}
+	machine.ObjectMeta.Annotations[controlplanev1.KubeadmClusterConfigurationAnnotation] = string(clusterConfig)
+	// 	if err := r.Client.Patch(ctx, updatedMachine, original); err != nil {
+	// 		// if err := patchHelper.Patch(ctx, machine); err != nil {
+	// 		reterr = errors.Wrap(err, "failed to patch the machine")
+	// 	}
+	// }
+	return
 }

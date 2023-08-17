@@ -54,6 +54,10 @@ const (
 	// RollingUpdateInProgressReason (Severity=Warning) documents a KubeadmControlPlane object executing a
 	// rolling upgrade for aligning the machines spec to the desired state.
 	RollingUpdateInProgressReason = "RollingUpdateInProgress"
+
+	// InplaceUpdateInProgressReason (Severity=Warning) documents a KubeadmControlPlane object executing a
+	// in-place upgrade for aligning the machines spec to the desired state.
+	InplaceUpdateInProgressReason = "InplaceUpdateInProgress"
 )
 
 const (

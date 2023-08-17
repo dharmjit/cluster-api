@@ -24,6 +24,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	kerrors "k8s.io/apimachinery/pkg/util/errors"
+	"k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
@@ -182,6 +183,41 @@ func (c *ControlPlane) MachinesNeedingRollout() (collections.Machines, map[strin
 		}
 	}
 	return machinesNeedingRollout, rolloutReasons
+}
+
+// MachinesPendingInplaceUpgrades return a list of machines that need to be rolled out.
+func (c *ControlPlane) MachinesRunningInplaceUpgrades() collections.Machines {
+	// Ignore machines to be deleted.
+	machines := c.Machines.Filter(collections.Not(collections.HasDeletionTimestamp))
+
+	// Return machines if they are scheduled for rollout or if with an outdated configuration.
+	MachinesRunningInplaceUpgrades := make(collections.Machines, len(machines))
+	if c.KCP.Spec.RolloutStrategy.Type == controlplanev1.InplaceUpdateStrategyType {
+		for _, m := range machines {
+			if m.Spec.Upgrade.Run != nil && *m.Spec.Upgrade.Run {
+				MachinesRunningInplaceUpgrades.Insert(m)
+			}
+		}
+	}
+	return MachinesRunningInplaceUpgrades
+}
+
+func (c *ControlPlane) PatchUpgradeMachine(ctx context.Context, machines collections.Machines) error {
+	errList := []error{}
+	for _, m := range machines {
+		if m.Status.Upgrade.Phase != nil && *m.Status.Upgrade.Phase == "Completed" && (m.Status.Upgrade.TransitionedAt.Time).After(m.Spec.Upgrade.StartedAt.Time) {
+			m.Spec.Upgrade.Run = pointer.Bool(false)
+			if helper, ok := c.machinesPatchHelpers[m.Name]; ok {
+				if err := helper.Patch(ctx, m); err != nil {
+					errList = append(errList, errors.Wrapf(err, "failed to patch machine %s", m.Name))
+				}
+				delete(machines, m.Name)
+				continue
+			}
+			errList = append(errList, errors.Errorf("failed to get patch helper for machine %s", m.Name))
+		}
+	}
+	return kerrors.NewAggregate(errList)
 }
 
 // UpToDateMachines returns the machines that are up to date with the control

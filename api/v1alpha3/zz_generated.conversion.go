@@ -1219,6 +1219,7 @@ func autoConvert_v1beta1_MachineSpec_To_v1alpha3_MachineSpec(in *v1beta1.Machine
 	out.NodeDrainTimeout = (*metav1.Duration)(unsafe.Pointer(in.NodeDrainTimeout))
 	// WARNING: in.NodeVolumeDetachTimeout requires manual conversion: does not exist in peer-type
 	// WARNING: in.NodeDeletionTimeout requires manual conversion: does not exist in peer-type
+	// WARNING: in.Upgrade requires manual conversion: does not exist in peer-type
 	return nil
 }
 
@@ -1250,6 +1251,7 @@ func autoConvert_v1beta1_MachineStatus_To_v1alpha3_MachineStatus(in *v1beta1.Mac
 	out.InfrastructureReady = in.InfrastructureReady
 	out.ObservedGeneration = in.ObservedGeneration
 	out.Conditions = *(*Conditions)(unsafe.Pointer(&in.Conditions))
+	// WARNING: in.Upgrade requires manual conversion: does not exist in peer-type
 	return nil
 }
 

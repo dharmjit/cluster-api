@@ -35,6 +35,10 @@ const (
 	// RollingUpdateStrategyType replaces the old control planes by new one using rolling update
 	// i.e. gradually scale up or down the old control planes and scale up or down the new one.
 	RollingUpdateStrategyType RolloutStrategyType = "RollingUpdate"
+
+	// InplaceUpdateStrategyType updates the existing control-plane machines to facilitate the
+	// Inplace KCP Upgrades contract without creating new machines.
+	InplaceUpdateStrategyType RolloutStrategyType = "InplaceUpdate"
 )
 
 const (
@@ -160,8 +164,8 @@ type RolloutBefore struct {
 // RolloutStrategy describes how to replace existing machines
 // with new ones.
 type RolloutStrategy struct {
-	// Type of rollout. Currently the only supported strategy is
-	// "RollingUpdate".
+	// Type of rollout. Currently the only supported strategies are
+	// "RollingUpdate" and "InplaceUpdate"
 	// Default is RollingUpdate.
 	// +optional
 	Type RolloutStrategyType `json:"type,omitempty"`

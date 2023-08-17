@@ -1365,6 +1365,16 @@ spec:
                           higher level entities like autoscaler that will be interfacing
                           with cluster-api as generic provider.
                         type: string
+                      upgrade:
+                        properties:
+                          run:
+                            description: Upgrade defines that whether a machine is
+                              awaiting in-place upgrade
+                            type: boolean
+                          startedAt:
+                            format: date-time
+                            type: string
+                        type: object
                       version:
                         description: Version defines the desired Kubernetes version.
                           This field is meant to be optionally used by bootstrap providers.

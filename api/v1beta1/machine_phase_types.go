@@ -61,4 +61,7 @@ const (
 
 	// MachinePhaseUnknown is returned if the Machine state cannot be determined.
 	MachinePhaseUnknown = MachinePhase("Unknown")
+
+	// MachinePhaseUpgrading is the Machine state when the Machine is being In-place upgraded
+	MachinePhaseUpgrading = MachinePhase("Upgrading")
 )

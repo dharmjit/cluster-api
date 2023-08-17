@@ -931,6 +931,16 @@ spec:
                   and consumed by higher level entities like autoscaler that will
                   be interfacing with cluster-api as generic provider.
                 type: string
+              upgrade:
+                properties:
+                  run:
+                    description: Upgrade defines that whether a machine is awaiting
+                      in-place upgrade
+                    type: boolean
+                  startedAt:
+                    format: date-time
+                    type: string
+                type: object
               version:
                 description: Version defines the desired Kubernetes version. This
                   field is meant to be optionally used by bootstrap providers.
@@ -1153,6 +1163,16 @@ spec:
                 description: Phase represents the current phase of machine actuation.
                   E.g. Pending, Running, Terminating, Failed etc.
                 type: string
+              upgrade:
+                properties:
+                  phase:
+                    description: Upgrade represents the current in-place upgrade status.
+                      E.g. Running, Failed, Completed, etc.
+                    type: string
+                  transitionedAt:
+                    format: date-time
+                    type: string
+                type: object
             type: object
         type: object
     served: true

@@ -94,6 +94,8 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"sigs.k8s.io/cluster-api/api/v1beta1.PatchSelectorMatchMachinePoolClass":       schema_sigsk8sio_cluster_api_api_v1beta1_PatchSelectorMatchMachinePoolClass(ref),
 		"sigs.k8s.io/cluster-api/api/v1beta1.Topology":                                 schema_sigsk8sio_cluster_api_api_v1beta1_Topology(ref),
 		"sigs.k8s.io/cluster-api/api/v1beta1.UnhealthyCondition":                       schema_sigsk8sio_cluster_api_api_v1beta1_UnhealthyCondition(ref),
+		"sigs.k8s.io/cluster-api/api/v1beta1.UpgradeSpec":                              schema_sigsk8sio_cluster_api_api_v1beta1_UpgradeSpec(ref),
+		"sigs.k8s.io/cluster-api/api/v1beta1.UpgradeStatus":                            schema_sigsk8sio_cluster_api_api_v1beta1_UpgradeStatus(ref),
 		"sigs.k8s.io/cluster-api/api/v1beta1.VariableSchema":                           schema_sigsk8sio_cluster_api_api_v1beta1_VariableSchema(ref),
 		"sigs.k8s.io/cluster-api/api/v1beta1.WorkersClass":                             schema_sigsk8sio_cluster_api_api_v1beta1_WorkersClass(ref),
 		"sigs.k8s.io/cluster-api/api/v1beta1.WorkersTopology":                          schema_sigsk8sio_cluster_api_api_v1beta1_WorkersTopology(ref),
@@ -2995,12 +2997,18 @@ func schema_sigsk8sio_cluster_api_api_v1beta1_MachineSpec(ref common.ReferenceCa
 							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Duration"),
 						},
 					},
+					"upgrade": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("sigs.k8s.io/cluster-api/api/v1beta1.UpgradeSpec"),
+						},
+					},
 				},
 				Required: []string{"clusterName", "bootstrap", "infrastructureRef"},
 			},
 		},
 		Dependencies: []string{
-			"k8s.io/api/core/v1.ObjectReference", "k8s.io/apimachinery/pkg/apis/meta/v1.Duration", "sigs.k8s.io/cluster-api/api/v1beta1.Bootstrap"},
+			"k8s.io/api/core/v1.ObjectReference", "k8s.io/apimachinery/pkg/apis/meta/v1.Duration", "sigs.k8s.io/cluster-api/api/v1beta1.Bootstrap", "sigs.k8s.io/cluster-api/api/v1beta1.UpgradeSpec"},
 	}
 }
 
@@ -3107,11 +3115,17 @@ func schema_sigsk8sio_cluster_api_api_v1beta1_MachineStatus(ref common.Reference
 							},
 						},
 					},
+					"upgrade": {
+						SchemaProps: spec.SchemaProps{
+							Default: map[string]interface{}{},
+							Ref:     ref("sigs.k8s.io/cluster-api/api/v1beta1.UpgradeStatus"),
+						},
+					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"k8s.io/api/core/v1.NodeSystemInfo", "k8s.io/api/core/v1.ObjectReference", "k8s.io/apimachinery/pkg/apis/meta/v1.Time", "sigs.k8s.io/cluster-api/api/v1beta1.Condition", "sigs.k8s.io/cluster-api/api/v1beta1.MachineAddress"},
+			"k8s.io/api/core/v1.NodeSystemInfo", "k8s.io/api/core/v1.ObjectReference", "k8s.io/apimachinery/pkg/apis/meta/v1.Time", "sigs.k8s.io/cluster-api/api/v1beta1.Condition", "sigs.k8s.io/cluster-api/api/v1beta1.MachineAddress", "sigs.k8s.io/cluster-api/api/v1beta1.UpgradeStatus"},
 	}
 }
 
@@ -3488,6 +3502,58 @@ func schema_sigsk8sio_cluster_api_api_v1beta1_UnhealthyCondition(ref common.Refe
 		},
 		Dependencies: []string{
 			"k8s.io/apimachinery/pkg/apis/meta/v1.Duration"},
+	}
+}
+
+func schema_sigsk8sio_cluster_api_api_v1beta1_UpgradeSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Type: []string{"object"},
+				Properties: map[string]spec.Schema{
+					"run": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Upgrade defines that whether a machine is awaiting in-place upgrade",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"startedAt": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Time"},
+	}
+}
+
+func schema_sigsk8sio_cluster_api_api_v1beta1_UpgradeStatus(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Type: []string{"object"},
+				Properties: map[string]spec.Schema{
+					"phase": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Upgrade represents the current in-place upgrade status. E.g. Running, Failed, Completed, etc.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"transitionedAt": {
+						SchemaProps: spec.SchemaProps{
+							Ref: ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Time"},
 	}
 }
 

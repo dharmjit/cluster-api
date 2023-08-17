@@ -92,6 +92,42 @@ func NeedsRollout(reconciliationTime, rolloutAfter *metav1.Time, rolloutBefore *
 	return "", false
 }
 
+// NeedsRollout checks if a Machine needs to be rolled out and returns the reason why.
+func PendingInplaceUpdateRollout(infraConfigs map[string]*unstructured.Unstructured, machineConfigs map[string]*bootstrapv1.KubeadmConfig, kcp *controlplanev1.KubeadmControlPlane, machine *clusterv1.Machine) (string, bool) {
+	rolloutReasons := []string{}
+
+	// Machines that do not match with KCP config.
+	if *machine.Spec.Version != machine.Status.NodeInfo.KubeletVersion {
+		rolloutReasons = append(rolloutReasons, "oudated K8s version")
+	}
+	if _, matches := matchesKubeadmBootstrapConfig(machineConfigs, kcp, machine); !matches {
+		rolloutReasons = append(rolloutReasons, "oudated Kubeadm config")
+	}
+	if len(rolloutReasons) > 0 {
+		return fmt.Sprintf("Machine %s needs rollout: %s", machine.Name, strings.Join(rolloutReasons, ",")), true
+	}
+
+	return "", false
+}
+
+// IsPendingInplaceUpgrade checks if a Machine is still pending inplace upgrade
+func IsPendingInplaceUpgrade(machineConfigs map[string]*bootstrapv1.KubeadmConfig, kcp *controlplanev1.KubeadmControlPlane, machine *clusterv1.Machine) bool {
+	rolloutReasons := []string{}
+
+	// Machines that do not match with KCP config.
+	if *machine.Spec.Version != machine.Status.NodeInfo.KubeletVersion {
+		rolloutReasons = append(rolloutReasons, "oudated K8s version")
+	}
+
+	if _, matches := matchesKubeadmBootstrapConfig(machineConfigs, kcp, machine); !matches {
+		rolloutReasons = append(rolloutReasons, "oudated Kubeadm config")
+	}
+	if len(rolloutReasons) > 0 {
+		return true
+	}
+	return false
+}
+
 // matchesTemplateClonedFrom checks if a Machine has a corresponding infrastructure machine that
 // matches a given KCP infra template and if it doesn't match returns the reason why.
 // Note: Differences to the labels and annotations on the infrastructure machine are not considered for matching
@@ -138,6 +174,11 @@ func matchesKubeadmBootstrapConfig(machineConfigs map[string]*bootstrapv1.Kubead
 	// Check if KCP and machine ClusterConfiguration matches, if not return
 	if !matchClusterConfiguration(kcp, machine) {
 		return "Machine ClusterConfiguration is outdated", false
+	}
+
+	// Return early as InplaceUpgdate does not handle [Init|Join]Configuration changes
+	if kcp.Spec.RolloutStrategy.Type == controlplanev1.InplaceUpdateStrategyType {
+		return "", true
 	}
 
 	bootstrapRef := machine.Spec.Bootstrap.ConfigRef

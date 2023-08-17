@@ -132,7 +132,32 @@ type MachineSpec struct {
 	// Defaults to 10 seconds.
 	// +optional
 	NodeDeletionTimeout *metav1.Duration `json:"nodeDeletionTimeout,omitempty"`
+
+	// +optional
+	Upgrade UpgradeSpec `json:"upgrade,omitempty"`
 }
+
+type UpgradeSpec struct {
+	// Upgrade defines that whether a machine is awaiting in-place upgrade
+	// +optional
+	Run *bool `json:"run,omitempty"`
+
+	// +optional
+	StartedAt *metav1.Time `json:"startedAt,omitempty"`
+}
+
+type UpgradePhase string
+
+const (
+	// UpgradePhaseScheduled
+	UpgradePhaseScheduled = UpgradePhase("Scheduled")
+
+	// UpgradePhaseScheduled
+	UpgradePhaseFailed = UpgradePhase("Failed")
+
+	// UpgradePhaseCompleted
+	UpgradePhaseCompleted = UpgradePhase("Completed")
+)
 
 // ANCHOR_END: MachineSpec
 
@@ -221,6 +246,19 @@ type MachineStatus struct {
 	// Conditions defines current service state of the Machine.
 	// +optional
 	Conditions Conditions `json:"conditions,omitempty"`
+
+	// +optional
+	Upgrade UpgradeStatus `json:"upgrade,omitempty"`
+}
+
+type UpgradeStatus struct {
+	// Upgrade represents the current in-place upgrade status.
+	// E.g. Running, Failed, Completed, etc.
+	// +optional
+	Phase *string `json:"phase,omitempty"`
+
+	// +optional
+	TransitionedAt *metav1.Time `json:"transitionedAt,omitempty"`
 }
 
 // ANCHOR_END: MachineStatus
